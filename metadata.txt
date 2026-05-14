@@ -1,0 +1,16 @@
+[general]
+name=Brick Annotator
+qgisMinimumVersion=3.40
+description=Simple annotation workflow plugin
+version=0.2
+author=Lena Kahle
+email=L.Kahle@campus.lmu.de
+about=Tile-by-tile annotation helper for e.g. creating annotations useful for deep learning in a structured way
+
+tracker=
+repository=
+homepage=
+category=Plugins
+icon=icon.png
+experimental=False
+deprecated=False
