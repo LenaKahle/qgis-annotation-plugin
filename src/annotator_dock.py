@@ -4,9 +4,6 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
     QLabel,
     QPushButton,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QHBoxLayout
 )
 
@@ -21,174 +18,71 @@ class AnnotatorDock(QDockWidget):
 
         self.plugin = plugin
 
-        self.container = QWidget()
+        container = QWidget()
+        self.setWidget(container)
 
-        self.setWidget(self.container)
-
-        self.layout = QVBoxLayout()
-
-        self.container.setLayout(self.layout)
-
-        self.build_ui()
-
-    # ---------------------------------------------------------
-    # BUILD UI
-    # ---------------------------------------------------------
-
-    def clear_layout(self):
-
-        while self.layout.count():
-
-            item = self.layout.takeAt(0)
-
-            widget = item.widget()
-
-            if widget:
-                widget.deleteLater()
-
-    def build_ui(self):
-
-        self.clear_layout()
-
-        if not self.plugin.layers_exist():
-
-            self.build_setup_ui()
-
-        else:
-
-            self.build_annotation_ui()
-
-    # ---------------------------------------------------------
-    # SETUP UI
-    # ---------------------------------------------------------
-
-    def build_setup_ui(self):
-
-        title = QLabel("Initial Project Setup")
-        title.setStyleSheet("font-size:18px;font-weight:bold;")
-
-        self.layout.addWidget(title)
+        layout = QVBoxLayout()
+        container.setLayout(layout)
 
         # -----------------------------------------
-        # classes
+        # TITLE
         # -----------------------------------------
-
-        self.layout.addWidget(QLabel("Classes"))
-
-        self.class_list = QListWidget()
-
-        self.class_list.addItem("brick")
-        self.class_list.addItem("bush")
-
-        self.layout.addWidget(self.class_list)
-
-        # -----------------------------------------
-        # tile size
-        # -----------------------------------------
-
-        self.layout.addWidget(QLabel("Tile Size (meters)"))
-
-        self.tile_size_input = QLineEdit("500")
-
-        self.layout.addWidget(self.tile_size_input)
-
-        # -----------------------------------------
-        # margin
-        # -----------------------------------------
-
-        self.layout.addWidget(QLabel("Margin (meters)"))
-
-        self.margin_input = QLineEdit("20")
-
-        self.layout.addWidget(self.margin_input)
-
-        # -----------------------------------------
-        # preview
-        # -----------------------------------------
-
-        preview_btn = QPushButton("Preview Zoom Level")
-
-        preview_btn.clicked.connect(
-            self.plugin.preview_zoom
-        )
-
-        self.layout.addWidget(preview_btn)
-
-        # -----------------------------------------
-        # create
-        # -----------------------------------------
-
-        create_btn = QPushButton("Create Annotation Layers")
-
-        create_btn.clicked.connect(
-            self.plugin.create_project_layers
-        )
-
-        self.layout.addWidget(create_btn)
-
-        self.layout.addStretch()
-
-    # ---------------------------------------------------------
-    # ANNOTATION UI
-    # ---------------------------------------------------------
-
-    def build_annotation_ui(self):
 
         self.progress_label = QLabel("0/0 tiles annotated")
-
         self.progress_label.setStyleSheet("""
-            font-size:16px;
-            font-weight:bold;
+            font-size: 16px;
+            font-weight: bold;
         """)
 
-        self.layout.addWidget(self.progress_label)
+        layout.addWidget(self.progress_label)
 
         # -----------------------------------------
-        # class buttons
+        # CLASS BUTTONS
         # -----------------------------------------
 
-        bush_btn = QPushButton("Add Bush (Ctrl+1)")
-
-        bush_btn.clicked.connect(
+        self.bush_btn = QPushButton("Add New Bush")
+        self.bush_btn.clicked.connect(
             lambda: self.plugin.activate_annotation_class("bush")
         )
 
-        self.layout.addWidget(bush_btn)
+        self.bush_btn.setStyleSheet("""
+            background-color: #dff0d8;
+            font-size: 16px;
+            padding: 12px;
+        """)
 
-        brick_btn = QPushButton("Add Brick (Ctrl+2)")
+        layout.addWidget(self.bush_btn)
 
-        brick_btn.clicked.connect(
+        self.brick_btn = QPushButton("Add New Brick")
+        self.brick_btn.clicked.connect(
             lambda: self.plugin.activate_annotation_class("brick")
         )
 
-        self.layout.addWidget(brick_btn)
+        self.brick_btn.setStyleSheet("""
+            background-color: #f2dede;
+            font-size: 16px;
+            padding: 12px;
+        """)
+
+        layout.addWidget(self.brick_btn)
 
         # -----------------------------------------
-        # navigation
+        # NAVIGATION
         # -----------------------------------------
 
-        done_btn = QPushButton("✓ Done + Next")
+        self.done_btn = QPushButton("✓ Mark Done + Next")
+        self.done_btn.clicked.connect(self.plugin.mark_done)
 
-        done_btn.clicked.connect(
-            self.plugin.mark_done
-        )
+        layout.addWidget(self.done_btn)
 
-        self.layout.addWidget(done_btn)
+        self.skip_btn = QPushButton("→ Skip Tile")
+        self.skip_btn.clicked.connect(self.plugin.mark_skipped)
 
-        skip_btn = QPushButton("→ Skip Tile")
+        layout.addWidget(self.skip_btn)
 
-        skip_btn.clicked.connect(
-            self.plugin.mark_skipped
-        )
+        self.prev_btn = QPushButton("← Previous Tile")
+        self.prev_btn.clicked.connect(self.plugin.previous_tile)
 
-        self.layout.addWidget(skip_btn)
+        layout.addWidget(self.prev_btn)
 
-        center_btn = QPushButton("⌖ Re-center Tile")
-
-        center_btn.clicked.connect(
-            self.plugin.recenter_current_tile
-        )
-
-        self.layout.addWidget(center_btn)
-
-        self.layout.addStretch()
+        layout.addStretch()

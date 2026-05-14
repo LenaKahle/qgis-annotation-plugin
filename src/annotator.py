@@ -5,32 +5,18 @@ from qgis.PyQt.QtGui import QIcon, QKeySequence
 
 from qgis.core import (
     QgsProject,
-    QgsField,
-    QgsVectorFileWriter,
-    QgsWkbTypes,
-    QgsCoordinateReferenceSystem,
-    QgsFillSymbol,
-    QgsSingleSymbolRenderer,
-    QgsEditorWidgetSetup,
-    QgsCategorizedSymbolRenderer,
-    QgsRendererCategory,
-    QgsFillSymbol,
+    QgsFeatureRequest,
     QgsRectangle,
-    QgsDefaultValue,
     QgsVectorLayer,
-    QgsGeometry,
-    QgsFeature
-
+    QgsDefaultValue
 )
 
-from qgis.PyQt.QtCore import QVariant
+from qgis.utils import iface
 
 from .annotator_dock import AnnotatorDock
 
-applicationName = "Annotation Helper"
-tilesFileName = "tiles.gpkg"
 
-class AnnotatorPlugin:
+class BrickAnnotatorPlugin:
 
     def __init__(self, iface):
 
@@ -42,6 +28,7 @@ class AnnotatorPlugin:
         self.annotation_layer = None
 
         self.current_tile_fid = None
+        self.tile_history = []
 
         self.current_class = None
 
@@ -53,20 +40,20 @@ class AnnotatorPlugin:
 
     def initGui(self):
 
-        icon_path = os.path.join(self.plugin_dir, "icon.png")
+        icon_path = os.path.join(self.plugin_dir, "../icon.png")
 
         self.action_open = QAction(
             QIcon(icon_path),
-            "Annotation Helper",
+            "Brick Annotator",
             self.iface.mainWindow()
         )
-    
+
         self.action_open.triggered.connect(self.show_dock)
 
         self.iface.addToolBarIcon(self.action_open)
 
         self.iface.addPluginToMenu(
-            applicationName,
+            "&Brick Annotator",
             self.action_open
         )
 
@@ -95,7 +82,7 @@ class AnnotatorPlugin:
         self.iface.removeToolBarIcon(self.action_open)
 
         self.iface.removePluginMenu(
-            applicationName,
+            "&Brick Annotator",
             self.action_open
         )
 
@@ -130,55 +117,37 @@ class AnnotatorPlugin:
     # LAYERS
     # ---------------------------------------------------------
 
-    def get_tile_layer(self, silent=False):
+    def get_tile_layer(self):
 
         layers = QgsProject.instance().mapLayers().values()
 
         for layer in layers:
-
             if layer.name() == "tiles":
-
                 return layer
 
-        if not silent:
-
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                applicationName,
-                "Layer 'tiles' not found."
-            )
+        QMessageBox.warning(
+            self.iface.mainWindow(),
+            "Brick Annotator",
+            "Layer 'tiles' not found."
+        )
 
         return None
 
-    def get_annotation_layer(self, silent=False):
+    def get_annotation_layer(self):
 
         layers = QgsProject.instance().mapLayers().values()
 
         for layer in layers:
-
             if layer.name() == "annotations":
-
-                self.configure_annotation_layer(layer)
-
                 return layer
 
-        if not silent:
-
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                applicationName,
-                "Layer 'annotations' not found."
-            )
+        QMessageBox.warning(
+            self.iface.mainWindow(),
+            "Brick Annotator",
+            "Layer 'annotations' not found."
+        )
 
         return None
-    
-    def layers_exist(self):
-
-        return (
-            self.get_tile_layer(silent=True) is not None
-            and
-            self.get_annotation_layer(silent=True) is not None
-        )
 
     # ---------------------------------------------------------
     # TILE NAVIGATION
@@ -197,6 +166,8 @@ class AnnotatorPlugin:
 
                 self.current_tile_fid = feature.id()
 
+                self.tile_history.append(feature.id())
+
                 self.zoom_to_feature(feature)
 
                 self.update_progress()
@@ -205,9 +176,26 @@ class AnnotatorPlugin:
 
         QMessageBox.information(
             self.iface.mainWindow(),
-            applicationName,
+            "Brick Annotator",
             "No TODO tiles remaining."
         )
+
+    def previous_tile(self):
+
+        if len(self.tile_history) < 2:
+            return
+
+        self.tile_history.pop()
+
+        prev_fid = self.tile_history.pop()
+
+        feature = self.tile_layer.getFeature(prev_fid)
+
+        self.current_tile_fid = prev_fid
+
+        self.zoom_to_feature(feature)
+
+        self.update_progress()
 
     # ---------------------------------------------------------
     # TILE STATUS
@@ -302,7 +290,7 @@ class AnnotatorPlugin:
         self.iface.actionAddFeature().trigger()
 
         self.iface.messageBar().pushMessage(
-            applicationName,
+            "Brick Annotator",
             f"Drawing {class_name}",
             level=0,
             duration=2
@@ -328,291 +316,3 @@ class AnnotatorPlugin:
         self.iface.mapCanvas().setExtent(expanded)
 
         self.iface.mapCanvas().refresh()
-
-    def preview_zoom(self):
-
-        tile_size = float(
-            self.dock.tile_size_input.text()
-        )
-
-        margin = float(
-            self.dock.margin_input.text()
-        )
-
-        canvas = self.iface.mapCanvas()
-
-        center = canvas.center()
-
-        rect = QgsRectangle(
-            center.x() - tile_size/2 - margin,
-            center.y() - tile_size/2 - margin,
-            center.x() + tile_size/2 + margin,
-            center.y() + tile_size/2 + margin
-        )
-
-        canvas.setExtent(rect)
-
-        canvas.refresh()
-
-    def recenter_current_tile(self):
-
-        if self.current_tile_fid is None:
-            return
-
-        feature = self.tile_layer.getFeature(
-            self.current_tile_fid
-        )
-
-        self.zoom_to_feature(feature)
-
-    # ---------------------------------------------------------
-    # LAYER CREATION
-    
-    def create_project_layers(self):
-
-        raster = self.iface.activeLayer()
-
-        if not raster:
-
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                applicationName,
-                "Select orthophoto layer first."
-            )
-
-            return
-
-        extent = raster.extent()
-
-        crs = raster.crs()
-
-        tile_size = float(
-            self.dock.tile_size_input.text()
-        )
-
-        output_path = os.path.join(
-            os.path.dirname(raster.source()),
-            tilesFileName
-        )
-
-        # ---------------------------------------------------------
-        # tiles layer
-        # ---------------------------------------------------------
-
-        tiles_uri = (
-            f"Polygon?crs={crs.authid()}"
-        )
-
-        tiles = QgsVectorLayer(
-            tiles_uri,
-            "tiles",
-            "memory"
-        )
-
-        provider = tiles.dataProvider()
-
-        provider.addAttributes([
-            QgsField("id", QVariant.Int),
-            QgsField("status", QVariant.String)
-        ])
-
-        tiles.updateFields()
-
-        features = []
-
-        idx = 0
-
-        y = extent.yMinimum()
-
-        while y < extent.yMaximum():
-
-            x = extent.xMinimum()
-
-            while x < extent.xMaximum():
-
-                rect = QgsRectangle(
-                    x,
-                    y,
-                    x + tile_size,
-                    y + tile_size
-                )
-
-                feat = QgsFeature()
-
-                feat.setGeometry(
-                    QgsGeometry.fromRect(rect)
-                )
-
-                feat.setAttributes([
-                    idx,
-                    "todo"
-                ])
-
-                features.append(feat)
-
-                idx += 1
-
-                x += tile_size
-
-            y += tile_size
-
-        provider.addFeatures(features)
-
-        QgsProject.instance().addMapLayer(tiles)
-
-        self.style_tiles_layer(tiles)
-
-        # ---------------------------------------------------------
-        # annotations layer
-        # ---------------------------------------------------------
-
-        annotations_uri = (
-            f"Polygon?crs={crs.authid()}"
-        )
-
-        annotations = QgsVectorLayer(
-            annotations_uri,
-            "annotations",
-            "memory"
-        )
-
-        provider = annotations.dataProvider()
-
-        provider.addAttributes([
-            QgsField("class", QVariant.String),
-            QgsField("tile_id", QVariant.Int)
-        ])
-
-        annotations.updateFields()
-
-        QgsProject.instance().addMapLayer(
-            annotations
-        )
-
-        self.configure_annotation_layer(
-            annotations
-        )
-
-        # suppress popup forms
-
-        config = annotations.editFormConfig()
-
-        config.setSuppress(
-            config.SuppressOn
-        )
-
-        annotations.setEditFormConfig(config)
-
-        self.dock.build_ui()
-
-        self.next_tile()
-
-    def style_tiles_layer(self, layer):
-
-        categories = []
-
-        statuses = {
-            "todo": "#4488ff",
-            "done": "#44aa44",
-            "skipped": "#aaaaaa"
-        }
-
-        for status, color in statuses.items():
-
-            symbol = QgsFillSymbol.createSimple({
-                "color": "0,0,0,0",
-                "outline_color": color,
-                "outline_width": "0.8"
-            })
-
-            cat = QgsRendererCategory(
-                status,
-                symbol,
-                status
-            )
-
-            categories.append(cat)
-
-        renderer = QgsCategorizedSymbolRenderer(
-            "status",
-            categories
-        )
-
-        layer.setRenderer(renderer)
-
-        layer.triggerRepaint()
-
-
-    def configure_annotation_layer(self, layer):
-
-        # ---------------------------------------------------------
-        # CLASS DROPDOWN (VALUEMAP)
-        # ---------------------------------------------------------
-
-        class_idx = layer.fields().indexOf("class")
-
-        if class_idx == -1:
-            return
-
-        setup = {
-            "map": {
-                "brick": "brick",
-                "bush": "bush"
-            }
-        }
-
-        layer.setEditorWidgetSetup(
-            class_idx,
-            QgsEditorWidgetSetup(
-                "ValueMap",
-                setup
-            )
-        )
-
-        # ---------------------------------------------------------
-        # CATEGORIZED RENDERER
-        # ---------------------------------------------------------
-
-        categories = []
-
-        class_colors = {
-            "brick": "#cc4422",
-            "bush": "#44aa55"
-        }
-
-        for class_name, color in class_colors.items():
-
-            symbol = QgsFillSymbol.createSimple({
-                "color": "0,0,0,0",
-                "outline_color": color,
-                "outline_width": "1"
-            })
-
-            category = QgsRendererCategory(
-                class_name,
-                symbol,
-                class_name
-            )
-
-            categories.append(category)
-
-        renderer = QgsCategorizedSymbolRenderer(
-            "class",
-            categories
-        )
-
-        layer.setRenderer(renderer)
-
-        # ---------------------------------------------------------
-        # SUPPRESS ATTRIBUTE POPUPS
-        # ---------------------------------------------------------
-
-        config = layer.editFormConfig()
-
-        config.setSuppress(
-            config.SuppressOn
-        )
-
-        layer.setEditFormConfig(config)
-
-        layer.triggerRepaint()
