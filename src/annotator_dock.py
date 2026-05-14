@@ -3,11 +3,8 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QLabel,
-    QPushButton,
-    QHBoxLayout
+    QPushButton
 )
-
-from qgis.PyQt.QtCore import Qt
 
 
 class AnnotatorDock(QDockWidget):
