@@ -77,8 +77,8 @@ class BrickAnnotatorPlugin:
     def next_tile(self):
         self.tile_manager.next_tile()
 
-    def previous_tile(self):
-        self.tile_manager.previous_tile()
+    def recenter_current_tile(self):
+        self.tile_manager.recenter_current_tile()
 
     def mark_done(self):
         self.tile_manager.mark_done()

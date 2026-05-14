@@ -10,7 +10,6 @@ class TileManager:
         self.progress_callback = progress_callback
         self.tile_layer = None
         self.current_tile_fid = None
-        self.tile_history = []
 
     def _refresh_tile_layer(self):
         self.tile_layer = self.layer_finder.get_tile_layer()
@@ -23,7 +22,6 @@ class TileManager:
         for feature in self.tile_layer.getFeatures():
             if feature["status"] == "todo":
                 self.current_tile_fid = feature.id()
-                self.tile_history.append(feature.id())
                 self.zoom_to_feature(feature)
                 self._update_progress()
                 return
@@ -34,20 +32,18 @@ class TileManager:
             "No TODO tiles remaining."
         )
 
-    def previous_tile(self):
-        if len(self.tile_history) < 2:
+    def recenter_current_tile(self):
+        if self.current_tile_fid is None:
             return
-
-        self.tile_history.pop()
-        prev_fid = self.tile_history.pop()
 
         if not self._refresh_tile_layer():
             return
 
-        feature = self.tile_layer.getFeature(prev_fid)
-        self.current_tile_fid = prev_fid
+        feature = self.tile_layer.getFeature(self.current_tile_fid)
+        if not feature.isValid():
+            return
+
         self.zoom_to_feature(feature)
-        self._update_progress()
 
     def mark_done(self):
         self.update_current_tile("done")

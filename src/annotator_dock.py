@@ -77,8 +77,8 @@ class AnnotatorDock(QDockWidget):
 
         layout.addWidget(self.skip_btn)
 
-        self.prev_btn = QPushButton("← Previous Tile")
-        self.prev_btn.clicked.connect(self.plugin.previous_tile)
+        self.prev_btn = QPushButton("⌖ Re-center Current Tile")
+        self.prev_btn.clicked.connect(self.plugin.recenter_current_tile)
 
         layout.addWidget(self.prev_btn)
 
