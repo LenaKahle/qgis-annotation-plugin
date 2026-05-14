@@ -1,5 +1,5 @@
 [general]
-name=Brick Annotator
+name=Annotation Helper
 qgisMinimumVersion=3.40
 description=Simple annotation workflow plugin
 version=0.2
