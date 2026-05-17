@@ -53,7 +53,7 @@ class AnnotatorPlugin:
             self.iface.addDockWidget(2, self.dock)
 
         if hasattr(self.dock, "annotation_panel"):
-            self.dock.annotation_panel.set_annotation_classes(self.annotation_classes)
+            self.dock.annotation_panel.set_annotation_classes(None)
 
         self.dock._decide_mode()
         self.dock.show()

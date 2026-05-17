@@ -129,10 +129,12 @@ def apply_annotation_symbology(annotation_layer, classes):
     for cls in classes:
 
         symbol = QgsFillSymbol.createSimple({
-            "color": cls["color"]+"88", # opacity 53%
+            "color": cls["color"],
             "outline_color": "black",
             "outline_width": "0.3"
         })
+
+        symbol.setOpacity(0.5)
 
         category = QgsRendererCategory(
             cls["name"],

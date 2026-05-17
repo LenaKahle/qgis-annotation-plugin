@@ -1,6 +1,6 @@
 from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from qgis.PyQt.QtGui import QColor
-
+from qgis.core import QgsCategorizedSymbolRenderer
 
 class AnnotationPanel(QWidget):
 
@@ -50,6 +50,8 @@ class AnnotationPanel(QWidget):
             {"name": "bush", "color": "#00ff00"}
         ]
         """
+        if not classes:
+            classes = self.load_classes_from_layer()
 
         # clear old buttons
         for i in reversed(range(self.class_button_container.count())):
@@ -102,3 +104,33 @@ class AnnotationPanel(QWidget):
         self.progress_label.setText(
             f"{done}/{total} tiles annotated"
         )
+
+    def load_classes_from_layer(self):
+        layer = self.plugin.layer_finder.get_annotation_layer(warn=False)
+
+        if not layer:
+            return []
+
+        # try to read renderer colors
+        renderer = layer.renderer()
+
+        color_map = {}
+
+        if isinstance(renderer, QgsCategorizedSymbolRenderer):
+            for cat in renderer.categories():
+                color_map[cat.value()] = cat.symbol().color().name()
+
+        values = set()
+
+        for feat in layer.getFeatures():
+            val = feat["class"]
+            if val:
+                values.add(val)
+
+        return [
+            {
+                "name": v,
+                "color": color_map.get(v, "#cccccc")
+            }
+            for v in sorted(values)
+        ]

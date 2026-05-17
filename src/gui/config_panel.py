@@ -207,17 +207,7 @@ class ConfigPanel(QWidget):
         )
 
         item.setBackground(self.selected_class_color)
-
-        brightness = (
-            self.selected_class_color.red()
-            + self.selected_class_color.green()
-            + self.selected_class_color.blue()
-        ) / 3
-
-        if brightness < 128:
-            item.setForeground(QColor("white"))
-        else:
-            item.setForeground(QColor("black"))
+        item.setForeground(QColor("black"))
 
         self.class_list.addItem(item)
 
