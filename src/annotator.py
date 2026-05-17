@@ -4,16 +4,13 @@ from qgis.core import (
     QgsProject,
     QgsMapLayer
 )
-from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtWidgets import QMessageBox
+from .gui.init_toolbar_icon import InitToolbarIcon
 
 from .annotator_dock import AnnotatorDock
-from .annotation_manager import AnnotationManager
-from .gui import PluginGui
-from .layer_finder import LayerFinder
-from .tile_manager import TileManager
-from .layer_creator import create_tile_layer, create_annotation_layer, ensure_field
-
+from .services.annotation_service import AnnotationService
+from .services.layer_service import LayerService
+from .services.tile_service import TileService
 
 class AnnotatorPlugin:
 
@@ -21,10 +18,10 @@ class AnnotatorPlugin:
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
 
-        self.layer_finder = LayerFinder(iface)
-        self.tile_manager = TileManager(iface, self.layer_finder, self.update_progress)
-        self.annotation_manager = AnnotationManager(iface, self.layer_finder)
-        self.gui = PluginGui(
+        self.layer_finder = LayerService(iface)
+        self.tile_manager = TileService(iface, self.layer_finder, self.update_progress)
+        self.annotation_manager = AnnotationService(iface, self.layer_finder)
+        self.gui = InitToolbarIcon(
             iface,
             show_dock_callback=self.show_dock,
             activate_bush_callback=lambda: self.annotation_manager.activate_annotation_class("bush"),
@@ -55,20 +52,8 @@ class AnnotatorPlugin:
             self.dock = AnnotatorDock(self)
             self.iface.addDockWidget(2, self.dock)
 
+        self.dock._decide_mode()
         self.dock.show()
-        self.dock.set_mode("config" if self.should_show_configuration() else "annotate")
-
-        if not self.should_show_configuration():
-            if self.tile_manager.current_tile_fid is None:
-                self.tile_manager.next_tile()
-            else:
-                self.update_progress()
-
-    def should_show_configuration(self):
-        return not (
-            self.layer_finder.has_tile_layer() and
-            self.layer_finder.has_annotation_layer()
-        )
 
     def get_target_raster_layer(self):
         active = self.iface.activeLayer()
@@ -91,37 +76,6 @@ class AnnotatorPlugin:
         )
         return None
 
-    def create_tiles_and_annotation_layers(self, classes, tile_size, margin):
-        if not classes:
-            QMessageBox.warning(
-                self.iface.mainWindow(),
-                "Annotation Workflow",
-                "Add at least one annotation class before saving."
-            )
-            return False
-
-        raster_layer = self.get_target_raster_layer()
-        if raster_layer is None:
-            return False
-
-        tile_layer = self.layer_finder.get_tile_layer(warn=False)
-        annotation_layer = self.layer_finder.get_annotation_layer(warn=False)
-
-        if tile_layer is None:
-            tile_layer = create_tile_layer(raster_layer, tile_size)
-        else:
-            ensure_field(tile_layer, "status", QVariant.String)
-
-        if annotation_layer is None:
-            annotation_layer = create_annotation_layer(raster_layer)
-        else:
-            ensure_field(annotation_layer, "class", QVariant.String)
-
-        if self.dock:
-            self.dock.set_mode("annotate")
-
-        self.tile_manager.next_tile()
-        return True
 
     # ---------------------------------------------------------
     # ANNOTATION

@@ -2,7 +2,7 @@ from qgis.core import QgsRectangle
 from qgis.PyQt.QtWidgets import QMessageBox
 
 
-class TileManager:
+class TileService:
 
     def __init__(self, iface, layer_finder, progress_callback=None):
         self.iface = iface

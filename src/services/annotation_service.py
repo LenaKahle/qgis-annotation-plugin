@@ -1,7 +1,7 @@
 from qgis.core import QgsDefaultValue
 
 
-class AnnotationManager:
+class AnnotationService:
 
     def __init__(self, iface, layer_finder):
         self.iface = iface

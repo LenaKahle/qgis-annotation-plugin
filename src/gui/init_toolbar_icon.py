@@ -4,7 +4,7 @@ from qgis.PyQt.QtWidgets import QAction
 from qgis.PyQt.QtGui import QIcon
 
 
-class PluginGui:
+class InitToolbarIcon:
 
     def __init__(self, iface, show_dock_callback, activate_bush_callback, activate_brick_callback):
         self.iface = iface
@@ -15,7 +15,7 @@ class PluginGui:
         self.action_open = None
 
     def init_gui(self):
-        icon_path = os.path.join(os.path.dirname(__file__), "../icon.png")
+        icon_path = os.path.join(os.path.dirname(__file__), "../../icon.png")
 
         self.action_open = QAction(
             QIcon(icon_path),
