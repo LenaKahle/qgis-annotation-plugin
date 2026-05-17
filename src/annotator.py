@@ -2,11 +2,6 @@ import os
 
 from qgis.core import (
     QgsProject,
-    QgsVectorLayer,
-    QgsFeature,
-    QgsGeometry,
-    QgsRectangle,
-    QgsField,
     QgsMapLayer
 )
 from qgis.PyQt.QtCore import QVariant
@@ -17,6 +12,7 @@ from .annotation_manager import AnnotationManager
 from .gui import PluginGui
 from .layer_finder import LayerFinder
 from .tile_manager import TileManager
+from .layer_creator import create_tile_layer, create_annotation_layer, ensure_field
 
 
 class AnnotatorPlugin:
@@ -112,63 +108,14 @@ class AnnotatorPlugin:
         annotation_layer = self.layer_finder.get_annotation_layer(warn=False)
 
         if tile_layer is None:
-            tile_layer = QgsVectorLayer(
-                f"Polygon?crs={raster_layer.crs().authid()}",
-                "tiles",
-                "memory"
-            )
-            tile_provider = tile_layer.dataProvider()
-            tile_provider.addAttributes([QgsField("status", QVariant.String)])
-            tile_layer.updateFields()
-
-            features = []
-            extent = raster_layer.extent()
-            x = extent.xMinimum()
-            while x < extent.xMaximum():
-                y = extent.yMinimum()
-                while y < extent.yMaximum():
-                    rect = QgsRectangle(
-                        x,
-                        y,
-                        min(x + tile_size, extent.xMaximum()),
-                        min(y + tile_size, extent.yMaximum())
-                    )
-                    feature = QgsFeature(tile_layer.fields())
-                    feature.setGeometry(QgsGeometry.fromRect(rect))
-                    feature.setAttributes(["todo"])
-                    features.append(feature)
-                    y += tile_size
-                x += tile_size
-
-            tile_provider.addFeatures(features)
-            tile_layer.updateExtents()
-            QgsProject.instance().addMapLayer(tile_layer)
-
+            tile_layer = create_tile_layer(raster_layer, tile_size)
         else:
-            if tile_layer.fields().indexOf("status") == -1:
-                tile_layer.startEditing()
-                tile_layer.dataProvider().addAttributes([QgsField("status", QVariant.String)])
-                tile_layer.updateFields()
-                tile_layer.commitChanges()
+            ensure_field(tile_layer, "status", QVariant.String)
 
         if annotation_layer is None:
-            annotation_layer = QgsVectorLayer(
-                f"Polygon?crs={raster_layer.crs().authid()}",
-                "annotations",
-                "memory"
-            )
-            annotation_provider = annotation_layer.dataProvider()
-            annotation_provider.addAttributes([QgsField("class", QVariant.String)])
-            annotation_layer.updateFields()
-            annotation_layer.updateExtents()
-            QgsProject.instance().addMapLayer(annotation_layer)
-
+            annotation_layer = create_annotation_layer(raster_layer)
         else:
-            if annotation_layer.fields().indexOf("class") == -1:
-                annotation_layer.startEditing()
-                annotation_layer.dataProvider().addAttributes([QgsField("class", QVariant.String)])
-                annotation_layer.updateFields()
-                annotation_layer.commitChanges()
+            ensure_field(annotation_layer, "class", QVariant.String)
 
         if self.dock:
             self.dock.set_mode("annotate")
