@@ -25,7 +25,7 @@ class ConfigPanel(QWidget):
         super().__init__()
 
         self.plugin = plugin
-        self.selected_class_color = QColor("red")
+        self.selected_class_color = QColor("#7d79c8")
 
         self._build_ui()
 
@@ -311,6 +311,8 @@ class ConfigPanel(QWidget):
 
         if not created:
             return
+
+        self.plugin.set_annotation_classes(classes)
 
         if self.plugin.dock:
             self.plugin.dock.set_mode("annotate")

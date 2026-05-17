@@ -25,12 +25,12 @@ class AnnotatorDock(QDockWidget):
         outer_layout.addWidget(self.stack)
 
         self.config_panel = ConfigPanel(plugin)
-        self.annotate_panel = AnnotationPanel(plugin)
+        self.annotation_panel = AnnotationPanel(plugin)
 
         self.stack.addWidget(self.config_panel)
-        self.stack.addWidget(self.annotate_panel)
+        self.stack.addWidget(self.annotation_panel)
 
-        self.progress_label = self.annotate_panel.progress_label
+        self.progress_label = self.annotation_panel.progress_label
 
         outer_layout.addStretch()
         self._decide_mode()
@@ -40,7 +40,7 @@ class AnnotatorDock(QDockWidget):
         if mode == "config":
             self.stack.setCurrentWidget(self.config_panel)
         else:
-            self.stack.setCurrentWidget(self.annotate_panel)
+            self.stack.setCurrentWidget(self.annotation_panel)
 
 
     def _decide_mode(self):

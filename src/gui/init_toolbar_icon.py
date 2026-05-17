@@ -6,11 +6,10 @@ from qgis.PyQt.QtGui import QIcon
 
 class InitToolbarIcon:
 
-    def __init__(self, iface, show_dock_callback, activate_bush_callback, activate_brick_callback):
+    def __init__(self, iface, show_dock_callback, activate_class_callback):
         self.iface = iface
         self.show_dock_callback = show_dock_callback
-        self.activate_bush_callback = activate_bush_callback
-        self.activate_brick_callback = activate_brick_callback
+        self.activate_class_callback = activate_class_callback
 
         self.action_open = None
 

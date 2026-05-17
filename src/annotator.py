@@ -17,6 +17,7 @@ class AnnotatorPlugin:
     def __init__(self, iface):
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
+        self.annotation_classes = []
 
         self.layer_finder = LayerService(iface)
         self.tile_manager = TileService(iface, self.layer_finder, self.update_progress)
@@ -24,8 +25,7 @@ class AnnotatorPlugin:
         self.gui = InitToolbarIcon(
             iface,
             show_dock_callback=self.show_dock,
-            activate_bush_callback=lambda: self.annotation_manager.activate_annotation_class("bush"),
-            activate_brick_callback=lambda: self.annotation_manager.activate_annotation_class("brick")
+            activate_class_callback=self.activate_annotation_class
         )
 
         self.dock = None
@@ -51,6 +51,9 @@ class AnnotatorPlugin:
         if not self.dock:
             self.dock = AnnotatorDock(self)
             self.iface.addDockWidget(2, self.dock)
+
+        if hasattr(self.dock, "annotation_panel"):
+            self.dock.annotation_panel.set_annotation_classes(self.annotation_classes)
 
         self.dock._decide_mode()
         self.dock.show()
@@ -83,6 +86,13 @@ class AnnotatorPlugin:
 
     def activate_annotation_class(self, class_name):
         self.annotation_manager.activate_annotation_class(class_name)
+
+    def set_annotation_classes(self, classes):
+        self.annotation_classes = classes
+
+        # push into UI if dock exists
+        if self.dock:
+            self.dock.annotation_panel.set_annotation_classes(classes)
 
     # ---------------------------------------------------------
     # PROGRESS
