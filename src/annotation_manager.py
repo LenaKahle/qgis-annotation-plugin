@@ -27,7 +27,7 @@ class AnnotationManager:
 
         self.iface.actionAddFeature().trigger()
         self.iface.messageBar().pushMessage(
-            "Brick Annotator",
+            "Annotation Workflow",
             f"Drawing {class_name}",
             level=0,
             duration=2

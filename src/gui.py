@@ -19,15 +19,15 @@ class PluginGui:
 
         self.action_open = QAction(
             QIcon(icon_path),
-            "Brick Annotator",
+            "Annotation Workflow",
             self.iface.mainWindow()
         )
         self.action_open.triggered.connect(self.show_dock_callback)
 
         self.iface.addToolBarIcon(self.action_open)
-        self.iface.addPluginToMenu("&Brick Annotator", self.action_open)
+        self.iface.addPluginToMenu("&Annotation Workflow", self.action_open)
 
     def unload(self):
         if self.action_open:
             self.iface.removeToolBarIcon(self.action_open)
-            self.iface.removePluginMenu("&Brick Annotator", self.action_open)
+            self.iface.removePluginMenu("&Annotation Workflow", self.action_open)

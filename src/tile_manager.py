@@ -28,8 +28,8 @@ class TileManager:
 
         QMessageBox.information(
             self.iface.mainWindow(),
-            "Brick Annotator",
-            "No TODO tiles remaining."
+            "Annotation Workflow",
+            "Done! No TODO tiles remaining."
         )
 
     def recenter_current_tile(self):
