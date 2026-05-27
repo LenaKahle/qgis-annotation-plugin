@@ -1,5 +1,16 @@
-from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
+from qgis.PyQt.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QPushButton,
+    QDialog,
+    QDialogButtonBox,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+)
 from qgis.PyQt.QtGui import QColor
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsCategorizedSymbolRenderer
 
 class AnnotationPanel(QWidget):
@@ -31,6 +42,10 @@ class AnnotationPanel(QWidget):
         self.skip_btn = QPushButton("→ Skip Tile")
         self.skip_btn.clicked.connect(self.plugin.mark_skipped)
         self.layout.addWidget(self.skip_btn)
+
+        self.jump_btn = QPushButton("⋄ Select TODO Tile")
+        self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
+        self.layout.addWidget(self.jump_btn)
 
         self.prev_btn = QPushButton("⌖ Re-center Current Tile")
         self.prev_btn.clicked.connect(self.plugin.recenter_current_tile)
@@ -104,6 +119,66 @@ class AnnotationPanel(QWidget):
         self.progress_label.setText(
             f"{done}/{total} tiles annotated"
         )
+
+    def _open_todo_tile_dialog(self):
+        todo_features = self.plugin.tile_manager.get_todo_features()
+
+        if not todo_features:
+            QMessageBox.information(
+                self,
+                "Annotation Workflow",
+                "No TODO tiles available to choose from."
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select TODO Tile")
+
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Select a tile to begin annotating from:"))
+
+        list_widget = QListWidget(dialog)
+
+        for feature in todo_features:
+            rect = feature.geometry().boundingBox()
+            label = (
+                f"Tile {feature.id()}: "
+                f"x=[{rect.xMinimum():.2f}, {rect.xMaximum():.2f}] "
+                f"y=[{rect.yMinimum():.2f}, {rect.yMaximum():.2f}]"
+            )
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, feature.id())
+            list_widget.addItem(item)
+
+        layout.addWidget(list_widget)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            parent=dialog
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec_() != QDialog.Accepted:
+            return
+
+        selected_item = list_widget.currentItem()
+        if not selected_item:
+            QMessageBox.warning(
+                self,
+                "Annotation Workflow",
+                "Please select a tile before confirming."
+            )
+            return
+
+        fid = selected_item.data(Qt.UserRole)
+        if not self.plugin.select_todo_tile(fid):
+            QMessageBox.warning(
+                self,
+                "Annotation Workflow",
+                "Could not jump to the selected tile."
+            )
 
     def load_classes_from_layer(self):
         layer = self.plugin.layer_finder.get_annotation_layer(warn=False)

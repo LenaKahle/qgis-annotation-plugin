@@ -19,12 +19,40 @@ class TileService:
         if not self._refresh_tile_layer():
             return
 
-        for feature in self.tile_layer.getFeatures():
-            if feature["status"] == "todo":
-                self.current_tile_fid = feature.id()
-                self.zoom_to_feature(feature)
-                self._update_progress()
-                return
+        features = list(self.tile_layer.getFeatures())
+        
+        # If no current tile, pick the first todo tile
+        if self.current_tile_fid is None:
+            for feature in features:
+                if feature["status"] == "todo":
+                    self.current_tile_fid = feature.id()
+                    self.zoom_to_feature(feature)
+                    self._update_progress()
+                    return
+        else:
+            # Find current tile position and start looking after it
+            current_index = None
+            for i, feature in enumerate(features):
+                if feature.id() == self.current_tile_fid:
+                    current_index = i
+                    break
+            
+            # If current tile was found, start searching from the next one
+            if current_index is not None:
+                for feature in features[current_index + 1:]:
+                    if feature["status"] == "todo":
+                        self.current_tile_fid = feature.id()
+                        self.zoom_to_feature(feature)
+                        self._update_progress()
+                        return
+                
+                # Wrap around to beginning if no todo found after current
+                for feature in features:
+                    if feature["status"] == "todo":
+                        self.current_tile_fid = feature.id()
+                        self.zoom_to_feature(feature)
+                        self._update_progress()
+                        return
 
         QMessageBox.information(
             self.iface.mainWindow(),
@@ -78,6 +106,29 @@ class TileService:
                 done += 1
 
         return done, total
+
+    def get_todo_features(self):
+        if not self._refresh_tile_layer():
+            return []
+
+        return [
+            feature
+            for feature in self.tile_layer.getFeatures()
+            if feature["status"] == "todo"
+        ]
+
+    def select_tile(self, fid):
+        if not self._refresh_tile_layer():
+            return False
+
+        feature = self.tile_layer.getFeature(fid)
+        if not feature.isValid():
+            return False
+
+        self.current_tile_fid = fid
+        self.zoom_to_feature(feature)
+        self._update_progress()
+        return True
 
     def _update_progress(self):
         if self.progress_callback:

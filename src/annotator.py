@@ -118,3 +118,6 @@ class AnnotatorPlugin:
 
     def mark_skipped(self):
         self.tile_manager.mark_skipped()
+
+    def select_todo_tile(self, fid):
+        return self.tile_manager.select_tile(fid)
