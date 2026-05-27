@@ -43,13 +43,13 @@ class AnnotationPanel(QWidget):
         self.skip_btn.clicked.connect(self.plugin.mark_skipped)
         self.layout.addWidget(self.skip_btn)
 
-        self.jump_btn = QPushButton("⋄ Select TODO Tile")
-        self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
-        self.layout.addWidget(self.jump_btn)
-
         self.prev_btn = QPushButton("⌖ Re-center Current Tile")
         self.prev_btn.clicked.connect(self.plugin.recenter_current_tile)
         self.layout.addWidget(self.prev_btn)
+
+        self.jump_btn = QPushButton("⋄ Select another unannotated Tile to jump to")
+        self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
+        self.layout.addWidget(self.jump_btn)
 
         self.layout.addStretch()
 
@@ -135,7 +135,7 @@ class AnnotationPanel(QWidget):
         dialog.setWindowTitle("Select TODO Tile")
 
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("Select a tile to begin annotating from:"))
+        layout.addWidget(QLabel("Select a tile to continue annotating from:"))
 
         list_widget = QListWidget(dialog)
 
