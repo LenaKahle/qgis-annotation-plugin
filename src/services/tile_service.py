@@ -10,6 +10,7 @@ class TileService:
         self.progress_callback = progress_callback
         self.tile_layer = None
         self.current_tile_fid = None
+        self.tile_selection_mode = False
 
     def _refresh_tile_layer(self):
         self.tile_layer = self.layer_finder.get_tile_layer()
@@ -78,6 +79,34 @@ class TileService:
 
     def mark_skipped(self):
         self.update_current_tile("skipped")
+
+    def mark_tile_as_done(self, fid):
+        """
+        Mark a specific tile as done by its feature ID.
+        Does not advance to next tile.
+        
+        Args:
+            fid: The feature ID of the tile to mark as done
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._refresh_tile_layer():
+            return False
+
+        feature = self.tile_layer.getFeature(fid)
+        
+        if not feature.isValid():
+            return False
+        
+        self.tile_layer.startEditing()
+        feature["status"] = "done"
+        self.tile_layer.updateFeature(feature)
+        self.tile_layer.commitChanges()
+        
+        self._update_progress()
+        
+        return True
 
     def update_current_tile(self, new_status):
         if not self._refresh_tile_layer():

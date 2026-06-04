@@ -51,7 +51,22 @@ class AnnotationPanel(QWidget):
         self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
         self.layout.addWidget(self.jump_btn)
 
+        self.click_tile_btn = QPushButton("🖱️ Click on tile to mark as done")
+        self.click_tile_btn.clicked.connect(self._activate_tile_selection)
+        self.layout.addWidget(self.click_tile_btn)
+
+        self.reclassify_btn = QPushButton("🔄 Reclassify Annotation")
+        self.reclassify_btn.clicked.connect(self.plugin.change_annotation_class)
+        self.layout.addWidget(self.reclassify_btn)
+
         self.layout.addStretch()
+
+    def _activate_tile_selection(self):
+        """
+        Activate tile selection mode.
+        """
+        self.plugin.activate_tile_selection_mode()
+
 
     #
     # Called from plugin AFTER config is loaded
