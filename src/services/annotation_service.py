@@ -31,4 +31,4 @@ class AnnotationService:
             f"Drawing {class_name}",
             level=0,
             duration=2
-        )
+        )   

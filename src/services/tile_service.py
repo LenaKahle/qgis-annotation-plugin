@@ -136,7 +136,7 @@ class TileService:
 
     def zoom_to_feature(self, feature):
         rect = feature.geometry().boundingBox()
-        margin = 20
+        margin = (rect.xMaximum() - rect.xMinimum()) * 0.1 # Add 10% margin on each side
 
         expanded = QgsRectangle(
             rect.xMinimum() - margin,
