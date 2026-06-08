@@ -59,7 +59,10 @@ class AnnotatorPlugin:
             self.iface.addDockWidget(2, self.dock)
 
         if hasattr(self.dock, "annotation_panel"):
-            self.dock.annotation_panel.set_annotation_classes(None)
+            if self.annotation_classes:
+                self.dock.annotation_panel.set_annotation_classes(self.annotation_classes)
+            else:
+                self.dock.annotation_panel.set_annotation_classes(None)
 
         self.dock._decide_mode()
         self.dock.show()
@@ -94,14 +97,22 @@ class AnnotatorPlugin:
         self.annotation_manager.activate_annotation_class(class_name)
 
     def set_annotation_classes(self, classes):
-        self.annotation_classes = classes
+        self.annotation_classes = classes or []
 
         # push into UI if dock exists
         if self.dock:
-            self.dock.annotation_panel.set_annotation_classes(classes)
+            self.dock.annotation_panel.set_annotation_classes(self.annotation_classes)
 
     def change_annotation_class(self):
-        self.annotation_manager.change_annotation_class_dialog(self.iface.mainWindow(), self.annotation_classes)
+        available_classes = self.annotation_classes
+
+        if not available_classes and self.dock:
+            available_classes = self.dock.annotation_panel.load_classes_from_layer()
+
+        self.annotation_manager.change_annotation_class_dialog(
+            self.iface.mainWindow(),
+            available_classes
+        )
 
     # ---------------------------------------------------------
     # PROGRESS

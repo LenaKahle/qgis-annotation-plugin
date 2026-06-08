@@ -51,7 +51,7 @@ class AnnotationPanel(QWidget):
         self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
         self.layout.addWidget(self.jump_btn)
 
-        self.click_tile_btn = QPushButton("🖱️ Click on tile to mark as done")
+        self.click_tile_btn = QPushButton("✅ Click on tile to mark as done")
         self.click_tile_btn.clicked.connect(self._activate_tile_selection)
         self.layout.addWidget(self.click_tile_btn)
 
