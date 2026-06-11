@@ -103,17 +103,6 @@ class AnnotatorPlugin:
         if self.dock:
             self.dock.annotation_panel.set_annotation_classes(self.annotation_classes)
 
-    def change_annotation_class(self):
-        available_classes = self.annotation_classes
-
-        if not available_classes and self.dock:
-            available_classes = self.dock.annotation_panel.load_classes_from_layer()
-
-        self.annotation_manager.change_annotation_class_dialog(
-            self.iface.mainWindow(),
-            available_classes
-        )
-
     # ---------------------------------------------------------
     # PROGRESS
     # ---------------------------------------------------------

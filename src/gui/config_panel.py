@@ -15,8 +15,19 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import Qt
 
-from qgis.core import QgsRectangle
+import math
+
+from qgis.core import QgsMapLayer, QgsProject, QgsRectangle
 from ..services.layer_service import create_tiles_and_annotation_layers
+
+# Default muted annotation classes (user can remove them)
+DEFAULT_ANNOTATION_CLASSES = [
+    ("brick", "#c07b4b"),
+    ("bush", "#6aa84f"),
+    ("marker", "#5b9bd5"),
+    ("looting pit", "#c94b4b"),
+    ("otherwise interesting", "#8e7cc3"),
+]
 
 
 class ConfigPanel(QWidget):
@@ -76,6 +87,9 @@ class ConfigPanel(QWidget):
 
         layout.addWidget(self.class_list)
 
+        # Populate sensible defaults (user can remove them)
+        self._populate_default_classes()
+
         remove_class_btn = QPushButton("Remove selected class")
         remove_class_btn.clicked.connect(
             self._remove_selected_class
@@ -102,14 +116,7 @@ class ConfigPanel(QWidget):
 
         tile_row.addWidget(self.tile_size_spin)
 
-        tile_row.addWidget(QLabel("Margin:"))
-
-        self.tile_margin_spin = QDoubleSpinBox()
-        self.tile_margin_spin.setRange(0, 10000)
-        self.tile_margin_spin.setValue(5)
-        self.tile_margin_spin.setSingleStep(1)
-
-        tile_row.addWidget(self.tile_margin_spin)
+        tile_row.addWidget(QLabel("Margin shown: 10%"))
 
         layout.addLayout(tile_row)
 
@@ -169,6 +176,38 @@ class ConfigPanel(QWidget):
             font-weight: bold;
             """
         )
+
+    def _add_class_item(self, name, color_hex):
+        """Add a class item programmatically with the given muted color."""
+        # Avoid duplicates
+        existing = [
+            self.class_list.item(i).data(Qt.UserRole)["name"]
+            for i in range(self.class_list.count())
+        ]
+
+        if name in existing:
+            return
+
+        color = QColor(color_hex)
+
+        item = QListWidgetItem(f"{name} ({color.name()})")
+
+        item.setData(
+            Qt.UserRole,
+            {
+                "name": name,
+                "color": color.name()
+            }
+        )
+
+        item.setBackground(color)
+        item.setForeground(QColor("black"))
+
+        self.class_list.addItem(item)
+
+    def _populate_default_classes(self):
+        for name, hexcol in DEFAULT_ANNOTATION_CLASSES:
+            self._add_class_item(name, hexcol)
 
     #
     # Class management
@@ -237,10 +276,38 @@ class ConfigPanel(QWidget):
 
             return
 
+        raster_layer = self.plugin.iface.activeLayer()
+
+        if not raster_layer or raster_layer.type() != QgsMapLayer.RasterLayer:
+            rasters = [
+                layer
+                for layer in QgsProject.instance().mapLayers().values()
+                if layer.type() == QgsMapLayer.RasterLayer
+            ]
+
+            raster_layer = rasters[0] if len(rasters) == 1 else None
+
+        if raster_layer is None:
+            QMessageBox.warning(
+                self,
+                "Annotation Workflow",
+                (
+                    "Please select a raster layer or make a raster layer "
+                    "active before previewing tiles."
+                )
+            )
+            return
+
+        extent = raster_layer.extent()
+        width = extent.xMaximum() - extent.xMinimum()
+        height = extent.yMaximum() - extent.yMinimum()
+
+        columns = max(1, int(math.ceil(width / tile_size)))
+        rows = max(1, int(math.ceil(height / tile_size)))
+        num_tiles = columns * rows
+
         canvas = self.plugin.iface.mapCanvas()
-
         center = canvas.center()
-
         half = tile_size / 2.0
 
         preview_rect = QgsRectangle(
@@ -250,7 +317,7 @@ class ConfigPanel(QWidget):
             center.y() + half
         )
 
-        margin = self.tile_margin_spin.value()
+        margin = tile_size * 0.1
 
         preview_rect = QgsRectangle(
             preview_rect.xMinimum() - margin,
@@ -260,8 +327,13 @@ class ConfigPanel(QWidget):
         )
 
         canvas.setExtent(preview_rect)
-
         canvas.refresh()
+
+        QMessageBox.information(
+            self,
+            "Annotation Workflow",
+            f"Previewing one tile extent. Estimated number of tiles: {num_tiles}."
+        )
 
     #
     # Save configuration
@@ -284,12 +356,9 @@ class ConfigPanel(QWidget):
 
         tile_size = self.tile_size_spin.value()
 
-        margin = self.tile_margin_spin.value()
-
         config = {
             "classes": classes,
             "tile_size": tile_size,
-            "margin": margin,
         }
 
         created = create_tiles_and_annotation_layers(

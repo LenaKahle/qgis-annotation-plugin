@@ -48,7 +48,4 @@ class AnnotatorDock(QDockWidget):
             self.set_mode("config")
         else:
             self.set_mode("annotate")
-            if self.plugin.tile_manager.current_tile_fid is None:
-                self.plugin.tile_manager.next_tile()
-            else:
-                self.plugin.update_progress()
+            self.plugin.update_progress()

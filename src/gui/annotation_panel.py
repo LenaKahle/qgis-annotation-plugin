@@ -35,6 +35,10 @@ class AnnotationPanel(QWidget):
         self.class_button_container = QVBoxLayout()
         self.layout.addLayout(self.class_button_container)
 
+        self.click_tile_btn = QPushButton("✅ Click on tile to mark as done")
+        self.click_tile_btn.clicked.connect(self._activate_tile_selection)
+        self.layout.addWidget(self.click_tile_btn)
+
         self.done_btn = QPushButton("✓ Mark Done + Next")
         self.done_btn.clicked.connect(self.plugin.mark_done)
         self.layout.addWidget(self.done_btn)
@@ -50,14 +54,6 @@ class AnnotationPanel(QWidget):
         self.jump_btn = QPushButton("⋄ Select another unannotated Tile to jump to")
         self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
         self.layout.addWidget(self.jump_btn)
-
-        self.click_tile_btn = QPushButton("✅ Click on tile to mark as done")
-        self.click_tile_btn.clicked.connect(self._activate_tile_selection)
-        self.layout.addWidget(self.click_tile_btn)
-
-        self.reclassify_btn = QPushButton("🔄 Reclassify Annotation")
-        self.reclassify_btn.clicked.connect(self.plugin.change_annotation_class)
-        self.layout.addWidget(self.reclassify_btn)
 
         self.layout.addStretch()
 
