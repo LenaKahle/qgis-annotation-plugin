@@ -10,9 +10,11 @@ from qgis.PyQt.QtWidgets import QMessageBox
 from .gui.init_toolbar_icon import InitToolbarIcon
 
 from .annotator_dock import AnnotatorDock
+from .verification_dock import VerificationDock
 from .services.annotation_service import AnnotationService
 from .services.layer_service import LayerService
 from .services.tile_service import TileService
+from .services.verification_service import VerificationService
 
 class AnnotatorPlugin:
 
@@ -20,17 +22,21 @@ class AnnotatorPlugin:
         self.iface = iface
         self.plugin_dir = os.path.dirname(__file__)
         self.annotation_classes = []
+        self.verification_classes = []
 
         self.layer_finder = LayerService(iface)
         self.tile_manager = TileService(iface, self.layer_finder, self.update_progress)
         self.annotation_manager = AnnotationService(iface, self.layer_finder)
+        self.verification_service = VerificationService(iface)
         self.gui = InitToolbarIcon(
             iface,
             show_dock_callback=self.show_dock,
-            activate_class_callback=self.activate_annotation_class
+            activate_class_callback=self.activate_annotation_class,
+            show_verifier_callback=self.show_verification_dock
         )
 
         self.dock = None
+        self.verification_dock = None
         self.map_tool = None
         self.previous_tool = None
 
@@ -46,6 +52,8 @@ class AnnotatorPlugin:
 
         if self.dock:
             self.iface.removeDockWidget(self.dock)
+        if self.verification_dock:
+            self.iface.removeDockWidget(self.verification_dock)
 
         self._deactivate_tile_selection_mode()
 
@@ -66,6 +74,32 @@ class AnnotatorPlugin:
 
         self.dock._decide_mode()
         self.dock.show()
+
+    def show_verification_dock(self):
+        if not self.verification_dock:
+            self.verification_dock = VerificationDock(self)
+            self.iface.addDockWidget(2, self.verification_dock)
+
+        layer = self.verification_service.get_active_vector_layer(warn=False)
+        if layer and self.verification_service.has_classification_field(layer) and self.verification_classes:
+            self.show_verification_annotation()
+        else:
+            self.show_verification_setup()
+        self.verification_dock.show()
+
+    def show_verification_setup(self):
+        if not self.verification_dock:
+            self.verification_dock = VerificationDock(self)
+            self.iface.addDockWidget(2, self.verification_dock)
+        self.verification_dock.set_mode("setup")
+        self.verification_dock.show()
+
+    def show_verification_annotation(self):
+        if not self.verification_dock:
+            self.verification_dock = VerificationDock(self)
+            self.iface.addDockWidget(2, self.verification_dock)
+        self.verification_dock.set_mode("annotate")
+        self.verification_dock.show()
 
     def get_target_raster_layer(self):
         active = self.iface.activeLayer()

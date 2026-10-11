@@ -1,11 +1,11 @@
 [general]
 name=Annotation Workflow
 qgisMinimumVersion=3.40
-description=Annotation workflow plugin
-version=0.3
+description=Annotation workflow and deep learning detection verification helper
+version=0.4
 author=Lena Kahle
 email=L.Kahle@campus.lmu.de
-about=Tile-by-tile annotation helper for e.g. creating annotations useful for deep learning in a structured way
+about=Tile-by-tile annotation helper and manual deep learning detection verification tool
 
 tracker=
 repository=
