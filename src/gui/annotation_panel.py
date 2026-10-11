@@ -51,7 +51,10 @@ class AnnotationPanel(QWidget):
         self.prev_btn.clicked.connect(self.plugin.recenter_current_tile)
         self.layout.addWidget(self.prev_btn)
 
-        self.jump_btn = QPushButton("⋄ Select another unannotated Tile to jump to")
+        self.jump_btn = QPushButton("⋄ Select another TODO tile")
+        self.jump_btn.setToolTip(
+            "Choose an unannotated tile to jump to."
+        )
         self.jump_btn.clicked.connect(self._open_todo_tile_dialog)
         self.layout.addWidget(self.jump_btn)
 

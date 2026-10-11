@@ -1,6 +1,8 @@
+import json
 import math
 import os
 import re
+import sqlite3
 import processing
 
 from qgis.PyQt.QtWidgets import QMessageBox
@@ -114,6 +116,64 @@ class LayerService:
             if layer.id() not in QgsProject.instance().mapLayers():
                 QgsProject.instance().addMapLayer(layer)
         return layers
+
+    @staticmethod
+    def load_annotation_classes(package_path):
+        if not os.path.isfile(package_path):
+            return None
+
+        connection = sqlite3.connect(package_path)
+        try:
+            with connection:
+                row = connection.execute(
+                    """
+                    SELECT value
+                    FROM annotator_plugin_config
+                    WHERE key = ?
+                    """,
+                    ("annotation_classes",)
+                ).fetchone()
+        except sqlite3.OperationalError as error:
+            if "no such table" in str(error).lower():
+                return None
+            raise
+        finally:
+            connection.close()
+
+        if row is None:
+            return None
+        classes = json.loads(row[0])
+        if not isinstance(classes, list) or any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("name"), str)
+            or not isinstance(item.get("color"), str)
+            for item in classes
+        ):
+            raise ValueError("Stored annotation classes have an invalid format.")
+        return classes
+
+    @staticmethod
+    def save_annotation_classes(package_path, classes):
+        connection = sqlite3.connect(package_path)
+        try:
+            with connection:
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS annotator_plugin_config (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT OR REPLACE INTO annotator_plugin_config (key, value)
+                    VALUES (?, ?)
+                    """,
+                    ("annotation_classes", json.dumps(classes))
+                )
+        finally:
+            connection.close()
 
 
 #
@@ -731,5 +791,15 @@ def create_tiles_and_annotation_layers(
         set_default_values(
             annotation_layer
         )
+
+    try:
+        layer_finder.save_annotation_classes(gpkg_path, classes)
+    except (OSError, sqlite3.Error) as error:
+        QMessageBox.critical(
+            iface.mainWindow(),
+            "Annotation Workflow",
+            f"Could not save annotation classes to the GeoPackage: {error}"
+        )
+        return False
 
     return True

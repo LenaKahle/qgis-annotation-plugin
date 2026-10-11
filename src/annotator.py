@@ -207,7 +207,7 @@ class AnnotatorPlugin:
         self.stop_area_drawing()
         canvas = self.iface.mapCanvas()
         self.previous_area_map_tool = canvas.mapTool()
-        self.area_map_tool = FreehandAreaMapTool(
+        self.area_map_tool = PolygonAreaMapTool(
             canvas,
             area_layer,
             self.iface
@@ -215,7 +215,7 @@ class AnnotatorPlugin:
         canvas.setMapTool(self.area_map_tool)
         self.iface.messageBar().pushMessage(
             "Annotation Workflow",
-            "Freehand draw a tile area on the map. Draw additional areas as separate strokes.",
+            "Click to add polygon corners; right-click to finish each area. Finish drawing areas when done.",
             level=0,
             duration=5
         )
@@ -224,6 +224,7 @@ class AnnotatorPlugin:
         if not self.area_map_tool:
             return
 
+        self.area_map_tool.finish_polygon()
         canvas = self.iface.mapCanvas()
         if canvas.mapTool() == self.area_map_tool and self.previous_area_map_tool:
             canvas.setMapTool(self.previous_area_map_tool)
@@ -280,41 +281,36 @@ class TileSelectionMapTool(QgsMapTool):
         )
 
 
-class FreehandAreaMapTool(QgsMapTool):
+class PolygonAreaMapTool(QgsMapTool):
 
     def __init__(self, canvas, area_layer, iface):
         super().__init__(canvas)
         self.area_layer = area_layer
         self.iface = iface
         self.points = []
-        self.drawing = False
         self.setCursor(Qt.CrossCursor)
 
-    def canvasPressEvent(self, event):
+    def canvasReleaseEvent(self, event):
+        if event.button() == Qt.RightButton:
+            self.finish_polygon()
+            return
+
         if event.button() != Qt.LeftButton:
             return
-        self.points = [self.toMapCoordinates(event.pos())]
-        self.drawing = True
+        self.points.append(self.toMapCoordinates(event.pos()))
+        self._notify(
+            f"Added point {len(self.points)}. Right-click to finish this area."
+        )
 
-    def canvasMoveEvent(self, event):
-        if self.drawing and event.buttons() & Qt.LeftButton:
-            point = self.toMapCoordinates(event.pos())
-            if not self.points or point != self.points[-1]:
-                self.points.append(point)
-
-    def canvasReleaseEvent(self, event):
-        if not self.drawing or event.button() != Qt.LeftButton:
+    def finish_polygon(self):
+        if not self.points:
             return
-
-        point = self.toMapCoordinates(event.pos())
-        if not self.points or point != self.points[-1]:
-            self.points.append(point)
-        self.drawing = False
-
         if len(self.points) < 3:
-            self._notify("Draw an area with at least three points.")
+            self._notify(
+                "An area needs at least three points; the incomplete area was discarded."
+            )
             self.points = []
-            return
+            return False
 
         ring = [QgsPointXY(point) for point in self.points]
         if ring[0] != ring[-1]:
@@ -326,18 +322,21 @@ class FreehandAreaMapTool(QgsMapTool):
             self._notify(
                 "That shape is invalid. Draw a non-crossing polygon and try again."
             )
-            return
+            return False
 
         feature = QgsFeature(self.area_layer.fields())
         feature.setGeometry(geometry)
         if not self.area_layer.dataProvider().addFeature(feature):
-            self._notify("Could not add the drawn area to the temporary layer.")
-            return
+            self._notify(
+                "Could not add the area to the Tile generation areas layer."
+            )
+            return False
         self.area_layer.updateExtents()
         self.area_layer.triggerRepaint()
         self._notify(
-            f"Added area {self.area_layer.featureCount()}. Draw another area or finish."
+            f"Added area {self.area_layer.featureCount()} to the Tile generation areas layer."
         )
+        return True
 
     def _notify(self, message):
         self.iface.messageBar().pushMessage(

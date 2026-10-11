@@ -1,5 +1,6 @@
 from qgis.PyQt.QtWidgets import (
     QDockWidget,
+    QSizePolicy,
     QWidget,
     QVBoxLayout,
     QStackedWidget
@@ -22,6 +23,8 @@ class AnnotatorDock(QDockWidget):
         container.setLayout(outer_layout)
 
         self.stack = QStackedWidget()
+        self.stack.setMinimumWidth(0)
+        self.stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         outer_layout.addWidget(self.stack)
 
         self.config_panel = ConfigPanel(plugin)
@@ -33,6 +36,8 @@ class AnnotatorDock(QDockWidget):
         self.progress_label = self.annotation_panel.progress_label
 
         outer_layout.addStretch()
+        self.setMinimumWidth(240)
+        self.resize(320, self.sizeHint().height())
         self._decide_mode()
 
 

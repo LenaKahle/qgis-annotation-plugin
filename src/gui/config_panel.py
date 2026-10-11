@@ -1,4 +1,5 @@
 import os
+import sqlite3
 
 from qgis.PyQt.QtWidgets import (
     QComboBox,
@@ -14,6 +15,7 @@ from qgis.PyQt.QtWidgets import (
     QDoubleSpinBox,
     QMessageBox,
     QColorDialog,
+    QSizePolicy,
 )
 
 from qgis.PyQt.QtGui import QColor
@@ -62,6 +64,7 @@ class ConfigPanel(QWidget):
         title = QLabel(
             "Choose an existing annotation package or create a new one."
         )
+        title.setWordWrap(True)
 
         title.setStyleSheet(
             "font-size: 16px; font-weight: bold;"
@@ -69,22 +72,36 @@ class ConfigPanel(QWidget):
 
         layout.addWidget(title)
 
-        layout.addWidget(QLabel("Continue with an existing annotator package:"))
-        package_row = QHBoxLayout()
+        package_label = QLabel("Continue with an existing annotator package:")
+        package_label.setWordWrap(True)
+        layout.addWidget(package_label)
+        package_row = QVBoxLayout()
         self.package_combo = QComboBox()
+        self.package_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.package_combo.setMinimumContentsLength(12)
+        self.package_combo.setSizePolicy(
+            QSizePolicy.Ignored,
+            QSizePolicy.Fixed
+        )
         package_row.addWidget(self.package_combo)
 
+        package_buttons = QHBoxLayout()
         use_package_button = QPushButton("Use selected")
         use_package_button.clicked.connect(self._use_selected_package)
-        package_row.addWidget(use_package_button)
+        package_buttons.addWidget(use_package_button)
 
         browse_package_button = QPushButton("Browse...")
         browse_package_button.clicked.connect(self._browse_existing_package)
-        package_row.addWidget(browse_package_button)
+        package_buttons.addWidget(browse_package_button)
+        package_row.addLayout(package_buttons)
         layout.addLayout(package_row)
-        layout.addWidget(QLabel(
+        new_package_label = QLabel(
             "Or configure a new package and annotation layer below:"
-        ))
+        )
+        new_package_label.setWordWrap(True)
+        layout.addWidget(new_package_label)
 
         #
         # Annotation classes
@@ -92,15 +109,14 @@ class ConfigPanel(QWidget):
 
         layout.addWidget(QLabel("Annotation classes:"))
 
-        class_row = QHBoxLayout()
-
         self.class_input = QLineEdit()
         self.class_input.setPlaceholderText(
             "Add a class name, e.g. brick"
         )
+        self.class_input.setMinimumWidth(0)
+        layout.addWidget(self.class_input)
 
-        class_row.addWidget(self.class_input)
-
+        class_row = QHBoxLayout()
         self.color_btn = QPushButton("Choose color")
         self.color_btn.clicked.connect(self._pick_color)
 
@@ -152,9 +168,14 @@ class ConfigPanel(QWidget):
 
         layout.addLayout(tile_row)
 
-        layout.addWidget(QLabel(
-            "Optional tile areas (draw one or more freehand polygons):"
-        ))
+        area_hint = QLabel(
+            "Optional tile generation areas layer: click map points to mark "
+            "polygon corners, then right-click to finish each area. If no "
+            "areas layer exists or it contains no areas, tiles cover the "
+            "entire selected raster."
+        )
+        area_hint.setWordWrap(True)
+        layout.addWidget(area_hint)
         area_row = QHBoxLayout()
         self.draw_areas_button = QPushButton("Draw tile areas")
         self.draw_areas_button.setCheckable(True)
@@ -369,11 +390,21 @@ class ConfigPanel(QWidget):
             self.plugin.layer_finder.set_package_path(None)
             return
 
-        classes = (
-            self.plugin.dock.annotation_panel.load_classes_from_layer()
-            if self.plugin.dock
-            else []
-        )
+        try:
+            classes = self.plugin.layer_finder.load_annotation_classes(path)
+        except (OSError, sqlite3.Error, ValueError) as error:
+            QMessageBox.critical(
+                self,
+                "Annotation Workflow",
+                f"Could not read saved annotation classes: {error}"
+            )
+            return
+        if classes is None:
+            classes = (
+                self.plugin.dock.annotation_panel.load_classes_from_layer()
+                if self.plugin.dock
+                else []
+            )
         apply_tile_symbology(layers["tiles"])
         if classes:
             apply_annotation_symbology(layers["annotations"], classes)
@@ -392,28 +423,53 @@ class ConfigPanel(QWidget):
             ):
                 self.area_layer = layer
                 return
+        self.area_layer = None
 
+    def _create_area_layer(self):
+        project = QgsProject.instance()
+        if (
+            self.area_layer
+            and self.area_layer.isValid()
+            and self.area_layer.id() in project.mapLayers()
+        ):
+            return self.area_layer
+        self.area_layer = None
         crs = self.plugin.iface.mapCanvas().mapSettings().destinationCrs()
         self.area_layer = QgsVectorLayer(
             f"Polygon?crs={crs.authid()}",
-            "Tile generation areas (temporary)",
+            "Tile generation areas",
             "memory"
         )
+        if not self.area_layer.isValid():
+            self.area_layer = None
+            QMessageBox.critical(
+                self,
+                "Annotation Workflow",
+                "Could not create the temporary Tile generation areas layer."
+            )
+            return None
         self.area_layer.setCustomProperty(
             "annotation_workflow/tile_areas",
             True
         )
-        project.addMapLayer(self.area_layer)
+        QgsProject.instance().addMapLayer(self.area_layer)
+        return self.area_layer
 
     def _toggle_area_drawing(self, enabled):
         if enabled:
+            area_layer = self._create_area_layer()
+            if area_layer is None:
+                self.draw_areas_button.setChecked(False)
+                return
             self.draw_areas_button.setText("Finish drawing areas")
-            self.plugin.start_area_drawing(self.area_layer)
+            self.plugin.start_area_drawing(area_layer)
         else:
             self.draw_areas_button.setText("Draw tile areas")
             self.plugin.stop_area_drawing()
 
     def _clear_areas(self):
+        if not self.area_layer or not self.area_layer.isValid():
+            return
         feature_ids = [feature.id() for feature in self.area_layer.getFeatures()]
         if not feature_ids:
             return
@@ -434,10 +490,18 @@ class ConfigPanel(QWidget):
         return self.plugin.get_target_raster_layer()
 
     def _tile_count(self, raster_layer):
+        area_layer = self.area_layer
+        if (
+            not area_layer
+            or not area_layer.isValid()
+            or area_layer.id() not in QgsProject.instance().mapLayers()
+        ):
+            area_layer = None
+            self.area_layer = None
         return estimate_tile_count(
             raster_layer,
             self.tile_size_spin.value(),
-            self.area_layer
+            area_layer
         )
 
     def _warn_for_tile_count(self, count, confirm=False):
