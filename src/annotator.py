@@ -1,8 +1,11 @@
 import os
 
 from qgis.core import (
+    QgsFeature,
+    QgsGeometry,
+    QgsMapLayer,
+    QgsPointXY,
     QgsProject,
-    QgsMapLayer
 )
 from qgis.gui import QgsMapTool
 from qgis.PyQt.QtCore import Qt
@@ -39,6 +42,8 @@ class AnnotatorPlugin:
         self.verification_dock = None
         self.map_tool = None
         self.previous_tool = None
+        self.area_map_tool = None
+        self.previous_area_map_tool = None
 
     # ---------------------------------------------------------
     # GUI
@@ -56,6 +61,7 @@ class AnnotatorPlugin:
             self.iface.removeDockWidget(self.verification_dock)
 
         self._deactivate_tile_selection_mode()
+        self.stop_area_drawing()
 
     # ---------------------------------------------------------
     # DOCK
@@ -197,6 +203,33 @@ class AnnotatorPlugin:
             self.map_tool = None
             self.previous_tool = None
 
+    def start_area_drawing(self, area_layer):
+        self.stop_area_drawing()
+        canvas = self.iface.mapCanvas()
+        self.previous_area_map_tool = canvas.mapTool()
+        self.area_map_tool = FreehandAreaMapTool(
+            canvas,
+            area_layer,
+            self.iface
+        )
+        canvas.setMapTool(self.area_map_tool)
+        self.iface.messageBar().pushMessage(
+            "Annotation Workflow",
+            "Freehand draw a tile area on the map. Draw additional areas as separate strokes.",
+            level=0,
+            duration=5
+        )
+
+    def stop_area_drawing(self):
+        if not self.area_map_tool:
+            return
+
+        canvas = self.iface.mapCanvas()
+        if canvas.mapTool() == self.area_map_tool and self.previous_area_map_tool:
+            canvas.setMapTool(self.previous_area_map_tool)
+        self.area_map_tool = None
+        self.previous_area_map_tool = None
+
 
 class TileSelectionMapTool(QgsMapTool):
     """
@@ -247,3 +280,69 @@ class TileSelectionMapTool(QgsMapTool):
         )
 
 
+class FreehandAreaMapTool(QgsMapTool):
+
+    def __init__(self, canvas, area_layer, iface):
+        super().__init__(canvas)
+        self.area_layer = area_layer
+        self.iface = iface
+        self.points = []
+        self.drawing = False
+        self.setCursor(Qt.CrossCursor)
+
+    def canvasPressEvent(self, event):
+        if event.button() != Qt.LeftButton:
+            return
+        self.points = [self.toMapCoordinates(event.pos())]
+        self.drawing = True
+
+    def canvasMoveEvent(self, event):
+        if self.drawing and event.buttons() & Qt.LeftButton:
+            point = self.toMapCoordinates(event.pos())
+            if not self.points or point != self.points[-1]:
+                self.points.append(point)
+
+    def canvasReleaseEvent(self, event):
+        if not self.drawing or event.button() != Qt.LeftButton:
+            return
+
+        point = self.toMapCoordinates(event.pos())
+        if not self.points or point != self.points[-1]:
+            self.points.append(point)
+        self.drawing = False
+
+        if len(self.points) < 3:
+            self._notify("Draw an area with at least three points.")
+            self.points = []
+            return
+
+        ring = [QgsPointXY(point) for point in self.points]
+        if ring[0] != ring[-1]:
+            ring.append(ring[0])
+        geometry = QgsGeometry.fromPolygonXY([ring])
+        self.points = []
+
+        if not geometry.isGeosValid() or geometry.area() == 0:
+            self._notify(
+                "That shape is invalid. Draw a non-crossing polygon and try again."
+            )
+            return
+
+        feature = QgsFeature(self.area_layer.fields())
+        feature.setGeometry(geometry)
+        if not self.area_layer.dataProvider().addFeature(feature):
+            self._notify("Could not add the drawn area to the temporary layer.")
+            return
+        self.area_layer.updateExtents()
+        self.area_layer.triggerRepaint()
+        self._notify(
+            f"Added area {self.area_layer.featureCount()}. Draw another area or finish."
+        )
+
+    def _notify(self, message):
+        self.iface.messageBar().pushMessage(
+            "Annotation Workflow",
+            message,
+            level=0,
+            duration=3
+        )

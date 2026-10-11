@@ -1,4 +1,8 @@
+import os
+
 from qgis.PyQt.QtWidgets import (
+    QComboBox,
+    QFileDialog,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -15,10 +19,19 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import Qt
 
-import math
-
-from qgis.core import QgsMapLayer, QgsProject, QgsRectangle
-from ..services.layer_service import create_tiles_and_annotation_layers
+from qgis.core import (
+    QgsMapLayer,
+    QgsProject,
+    QgsRectangle,
+    QgsVectorLayer,
+)
+from ..services.layer_service import (
+    ANNOTATOR_PACKAGE_SUFFIX,
+    apply_annotation_symbology,
+    apply_tile_symbology,
+    create_tiles_and_annotation_layers,
+    estimate_tile_count,
+)
 
 # Default muted annotation classes (user can remove them)
 DEFAULT_ANNOTATION_CLASSES = [
@@ -39,13 +52,15 @@ class ConfigPanel(QWidget):
         self.selected_class_color = QColor("#7d79c8")
 
         self._build_ui()
+        self._initialize_area_layer()
+        self.refresh_existing_packages()
 
     def _build_ui(self):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
         title = QLabel(
-            "No tiles or annotations layers found. Configure your project below."
+            "Choose an existing annotation package or create a new one."
         )
 
         title.setStyleSheet(
@@ -53,6 +68,23 @@ class ConfigPanel(QWidget):
         )
 
         layout.addWidget(title)
+
+        layout.addWidget(QLabel("Continue with an existing annotator package:"))
+        package_row = QHBoxLayout()
+        self.package_combo = QComboBox()
+        package_row.addWidget(self.package_combo)
+
+        use_package_button = QPushButton("Use selected")
+        use_package_button.clicked.connect(self._use_selected_package)
+        package_row.addWidget(use_package_button)
+
+        browse_package_button = QPushButton("Browse...")
+        browse_package_button.clicked.connect(self._browse_existing_package)
+        package_row.addWidget(browse_package_button)
+        layout.addLayout(package_row)
+        layout.addWidget(QLabel(
+            "Or configure a new package and annotation layer below:"
+        ))
 
         #
         # Annotation classes
@@ -119,6 +151,20 @@ class ConfigPanel(QWidget):
         tile_row.addWidget(QLabel("Margin shown: 10%"))
 
         layout.addLayout(tile_row)
+
+        layout.addWidget(QLabel(
+            "Optional tile areas (draw one or more freehand polygons):"
+        ))
+        area_row = QHBoxLayout()
+        self.draw_areas_button = QPushButton("Draw tile areas")
+        self.draw_areas_button.setCheckable(True)
+        self.draw_areas_button.toggled.connect(self._toggle_area_drawing)
+        area_row.addWidget(self.draw_areas_button)
+
+        clear_areas_button = QPushButton("Clear areas")
+        clear_areas_button.clicked.connect(self._clear_areas)
+        area_row.addWidget(clear_areas_button)
+        layout.addLayout(area_row)
 
         #
         # Buttons
@@ -264,7 +310,183 @@ class ConfigPanel(QWidget):
     # Tile preview
     #
 
+    def refresh_existing_packages(self):
+        selected_path = self.package_combo.currentData()
+        packages = {}
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.type() != QgsMapLayer.VectorLayer or not layer.isValid():
+                continue
+            path = self.plugin.layer_finder.source_package_path(layer)
+            if path.lower().endswith(ANNOTATOR_PACKAGE_SUFFIX):
+                packages[os.path.abspath(path)] = os.path.basename(path)
+        project_dir = QgsProject.instance().homePath()
+        if project_dir and os.path.isdir(project_dir):
+            for filename in os.listdir(project_dir):
+                if filename.lower().endswith(ANNOTATOR_PACKAGE_SUFFIX):
+                    path = os.path.abspath(os.path.join(project_dir, filename))
+                    packages[path] = filename
+
+        self.package_combo.clear()
+        for path, label in sorted(packages.items(), key=lambda item: item[1].lower()):
+            self.package_combo.addItem(label, path)
+
+        if selected_path:
+            index = self.package_combo.findData(selected_path)
+            if index != -1:
+                self.package_combo.setCurrentIndex(index)
+
+    def _browse_existing_package(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose an annotator package",
+            QgsProject.instance().homePath() or "",
+            f"Annotator packages (*{ANNOTATOR_PACKAGE_SUFFIX})"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(ANNOTATOR_PACKAGE_SUFFIX):
+            QMessageBox.warning(
+                self,
+                "Annotation Workflow",
+                f"Choose a GeoPackage ending in {ANNOTATOR_PACKAGE_SUFFIX}."
+            )
+            return
+        self._activate_package(path)
+
+    def _use_selected_package(self):
+        path = self.package_combo.currentData()
+        if path:
+            self._activate_package(path)
+
+    def _activate_package(self, path):
+        layers = self.plugin.layer_finder.load_package_layers(path)
+        if layers is None:
+            QMessageBox.warning(
+                self,
+                "Annotation Workflow",
+                "The selected GeoPackage must contain both 'tiles' and 'annotations' layers."
+            )
+            self.plugin.layer_finder.set_package_path(None)
+            return
+
+        classes = (
+            self.plugin.dock.annotation_panel.load_classes_from_layer()
+            if self.plugin.dock
+            else []
+        )
+        apply_tile_symbology(layers["tiles"])
+        if classes:
+            apply_annotation_symbology(layers["annotations"], classes)
+        self.plugin.tile_manager.current_tile_fid = None
+        self.plugin.set_annotation_classes(classes)
+        if self.plugin.dock:
+            self.plugin.dock.set_mode("annotate")
+            self.plugin.tile_manager.next_tile()
+
+    def _initialize_area_layer(self):
+        project = QgsProject.instance()
+        for layer in project.mapLayers().values():
+            if (
+                layer.customProperty("annotation_workflow/tile_areas", False)
+                and layer.isValid()
+            ):
+                self.area_layer = layer
+                return
+
+        crs = self.plugin.iface.mapCanvas().mapSettings().destinationCrs()
+        self.area_layer = QgsVectorLayer(
+            f"Polygon?crs={crs.authid()}",
+            "Tile generation areas (temporary)",
+            "memory"
+        )
+        self.area_layer.setCustomProperty(
+            "annotation_workflow/tile_areas",
+            True
+        )
+        project.addMapLayer(self.area_layer)
+
+    def _toggle_area_drawing(self, enabled):
+        if enabled:
+            self.draw_areas_button.setText("Finish drawing areas")
+            self.plugin.start_area_drawing(self.area_layer)
+        else:
+            self.draw_areas_button.setText("Draw tile areas")
+            self.plugin.stop_area_drawing()
+
+    def _clear_areas(self):
+        feature_ids = [feature.id() for feature in self.area_layer.getFeatures()]
+        if not feature_ids:
+            return
+
+        self.area_layer.startEditing()
+        self.area_layer.deleteFeatures(feature_ids)
+        if not self.area_layer.commitChanges():
+            QMessageBox.critical(
+                self,
+                "Annotation Workflow",
+                "Could not clear the temporary tile areas layer."
+            )
+            return
+        self.area_layer.updateExtents()
+        self.area_layer.triggerRepaint()
+
+    def _get_raster_layer(self):
+        return self.plugin.get_target_raster_layer()
+
+    def _tile_count(self, raster_layer):
+        return estimate_tile_count(
+            raster_layer,
+            self.tile_size_spin.value(),
+            self.area_layer
+        )
+
+    def _warn_for_tile_count(self, count, confirm=False):
+        if count > 50000:
+            message = (
+                f"This will create {count:,} tiles, which is an extremely "
+                "large number and may take a long time or use substantial "
+                "resources. Continue?"
+            )
+            if confirm:
+                return QMessageBox.warning(
+                    self,
+                    "Strong warning: very large tile generation",
+                    message,
+                    QMessageBox.Yes | QMessageBox.Cancel,
+                    QMessageBox.Cancel
+                ) == QMessageBox.Yes
+            QMessageBox.warning(
+                self,
+                "Strong warning: very large tile generation",
+                message
+            )
+        elif count > 30000:
+            message = (
+                f"This will create {count:,} tiles. Tile generation may take "
+                "a long time. Continue?"
+            )
+            if confirm:
+                return QMessageBox.warning(
+                    self,
+                    "Large tile generation",
+                    message,
+                    QMessageBox.Yes | QMessageBox.Cancel,
+                    QMessageBox.Cancel
+                ) == QMessageBox.Yes
+            QMessageBox.warning(self, "Large tile generation", message)
+        elif confirm:
+            return True
+        return not confirm
+
     def _preview_tile(self):
+        if self.plugin.area_map_tool:
+            QMessageBox.information(
+                self,
+                "Annotation Workflow",
+                "Finish drawing tile areas before previewing tile counts."
+            )
+            return
+
         tile_size = self.tile_size_spin.value()
 
         if tile_size <= 0:
@@ -276,35 +498,12 @@ class ConfigPanel(QWidget):
 
             return
 
-        raster_layer = self.plugin.iface.activeLayer()
-
-        if not raster_layer or raster_layer.type() != QgsMapLayer.RasterLayer:
-            rasters = [
-                layer
-                for layer in QgsProject.instance().mapLayers().values()
-                if layer.type() == QgsMapLayer.RasterLayer
-            ]
-
-            raster_layer = rasters[0] if len(rasters) == 1 else None
-
+        raster_layer = self._get_raster_layer()
         if raster_layer is None:
-            QMessageBox.warning(
-                self,
-                "Annotation Workflow",
-                (
-                    "Please select a raster layer or make a raster layer "
-                    "active before previewing tiles."
-                )
-            )
             return
 
-        extent = raster_layer.extent()
-        width = extent.xMaximum() - extent.xMinimum()
-        height = extent.yMaximum() - extent.yMinimum()
-
-        columns = max(1, int(math.ceil(width / tile_size)))
-        rows = max(1, int(math.ceil(height / tile_size)))
-        num_tiles = columns * rows
+        num_tiles = self._tile_count(raster_layer)
+        self._warn_for_tile_count(num_tiles)
 
         canvas = self.plugin.iface.mapCanvas()
         center = canvas.center()
@@ -332,7 +531,10 @@ class ConfigPanel(QWidget):
         QMessageBox.information(
             self,
             "Annotation Workflow",
-            f"Previewing one tile extent. Estimated number of tiles: {num_tiles}."
+            (
+                "Previewing one tile extent. "
+                f"Estimated number of tiles: {num_tiles:,}."
+            )
         )
 
     #
@@ -340,6 +542,14 @@ class ConfigPanel(QWidget):
     #
 
     def _save_configuration(self):
+        if self.plugin.area_map_tool:
+            QMessageBox.information(
+                self,
+                "Annotation Workflow",
+                "Finish drawing tile areas before creating tiles."
+            )
+            return
+
         classes = [
             self.class_list.item(i).data(Qt.UserRole)
             for i in range(self.class_list.count())
@@ -355,17 +565,33 @@ class ConfigPanel(QWidget):
             return
 
         tile_size = self.tile_size_spin.value()
+        raster_layer = self._get_raster_layer()
+        if raster_layer is None:
+            return
+
+        tile_count = self._tile_count(raster_layer)
+        if tile_count == 0:
+            QMessageBox.warning(
+                self,
+                "Annotation Workflow",
+                "No tiles intersect the selected areas. Adjust or clear the areas and try again."
+            )
+            return
+        if not self._warn_for_tile_count(tile_count, confirm=True):
+            return
 
         config = {
             "classes": classes,
             "tile_size": tile_size,
+            "raster_layer": raster_layer,
         }
 
         created = create_tiles_and_annotation_layers(
             self.plugin.iface,
             self.plugin.layer_finder,
             self.plugin.tile_manager,
-            config
+            config,
+            self.area_layer
         )
 
         if not created:

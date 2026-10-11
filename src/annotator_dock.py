@@ -44,8 +44,5 @@ class AnnotatorDock(QDockWidget):
 
 
     def _decide_mode(self):
-        if not (self.plugin.layer_finder.has_tile_layer() and self.plugin.layer_finder.has_annotation_layer()):
-            self.set_mode("config")
-        else:
-            self.set_mode("annotate")
-            self.plugin.update_progress()
+        self.config_panel.refresh_existing_packages()
+        self.set_mode("config")
